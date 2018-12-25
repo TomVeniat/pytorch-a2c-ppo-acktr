@@ -10,7 +10,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from tqdm import tqdm
 
+from SuperNetworks.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
@@ -65,8 +67,20 @@ def main():
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                         args.gamma, args.log_dir, args.add_timestep, device, False)
 
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
+    base_kwargs = {
+        'n_layer': 1,
+        'n_block': 1,
+        'n_scale': 3,
+        'n_chan': 12,
+
+        'static_node_proba': 1,
+        'deter_eval': True,
+
+        'recurrent': args.recurrent_policy
+    }
+
+    actor_critic = Policy(envs.observation_space.shape, envs.action_space, base=ThreeDimNeuralFabric,
+        base_kwargs=base_kwargs)
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -94,7 +108,7 @@ def main():
     episode_rewards = deque(maxlen=10)
 
     start = time.time()
-    for j in range(num_updates):
+    for j in tqdm(range(num_updates), desc='Outer'):
 
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
@@ -104,8 +118,8 @@ def main():
             else:
                 update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
 
-        if args.algo == 'ppo' and args.use_linear_clip_decay:
-            agent.clip_param = args.clip_param  * (1 - j / float(num_updates))
+        if args.algo == 'ppo' and args.use_linear_lr_decay:
+            agent.clip_param = args.clip_param * (1 - j / float(num_updates))
 
         for step in range(args.num_steps):
             # Sample actions
@@ -113,7 +127,8 @@ def main():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         rollouts.obs[step],
                         rollouts.recurrent_hidden_states[step],
-                        rollouts.masks[step])
+                        rollouts.masks[step]
+                )
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
@@ -214,7 +229,14 @@ def main():
                 # Sometimes monitor doesn't properly flush the outputs
                 win = visdom_plot(viz, win, args.log_dir, args.env_name,
                                   args.algo, args.num_env_steps)
-            except IOError:
+            except IOError as err:
+                print('#####')
+                print('#####')
+                print('#####')
+                print('GOT an error {}'.format(err))
+                print('#####')
+                print('#####')
+                print('#####')
                 pass
 
 

@@ -25,7 +25,8 @@ class Policy(nn.Module):
             else:
                 raise NotImplementedError
 
-        self.base = base(obs_shape[0], **base_kwargs)
+        self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
+        self.base.critic_linear = nn.Linear(self.base.output_size, 1)
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
@@ -77,6 +78,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs
+
 
 
 class NNBase(nn.Module):
@@ -169,6 +171,29 @@ class NNBase(nn.Module):
 
         return x, hxs
 
+class Adaptor(NNBase):
+    def __init__(self, base, recurrent, obs_shape, n_classes, **kwargs):
+        super(Adaptor, self).__init__(recurrent, n_classes, n_classes)
+        self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
+        self.recurrent = recurrent
+
+    def forward(self, inputs, rnn_hxs, masks):
+        self.base.fire(type='new_sequence')
+        self.base.batched_log_probas = []
+
+        probas = torch.ones(inputs.size(0), len(self.base.sampling_parameters)).to(inputs.device)
+
+        # self.probabilities = torch.cat([self.probabilities, probas.unsqueeze(0).detach().cpu()])
+        self.base.sample_archs(probas)
+
+        x = self.base(inputs / 255.0)[0]
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs
+
+
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
@@ -178,6 +203,8 @@ class CNNBase(NNBase):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
+
+        init_ = lambda m: m
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
@@ -194,6 +221,8 @@ class CNNBase(NNBase):
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
+
+        init_ = lambda m: m
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
 

@@ -102,6 +102,7 @@ color_defaults = [
 
 
 def visdom_plot(viz, win, folder, game, name, num_steps, bin_size=100, smooth=1):
+    # print(folder)
     tx, ty = load_data(folder, smooth, bin_size)
     if tx is None or ty is None:
         return win
@@ -129,7 +130,9 @@ def visdom_plot(viz, win, folder, game, name, num_steps, bin_size=100, smooth=1)
 
     # Show it in visdom
     image = np.transpose(image, (2, 0, 1))
-    return viz.image(image, win=win)
+    # print('Sending image to "{}"'.format(win))
+    return viz.line(ty, tx, win=win, opts=dict(title=folder))
+    # return viz.image(image, win=win)
 
 
 if __name__ == "__main__":
