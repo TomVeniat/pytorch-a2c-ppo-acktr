@@ -10,9 +10,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from supernets.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric
 from tqdm import tqdm
 
-from SuperNetworks.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
