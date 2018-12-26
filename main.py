@@ -4,12 +4,8 @@ import os
 import time
 from collections import deque
 
-import gym
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 from supernets.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric
 from tqdm import tqdm
 
@@ -20,7 +16,6 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-
 
 args = get_args()
 
@@ -65,22 +60,21 @@ def main():
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                        args.gamma, args.log_dir, args.add_timestep, device, False)
+                         args.gamma, args.log_dir, args.add_timestep, device, False)
 
     base_kwargs = {
         'n_layer': 1,
         'n_block': 1,
-        'n_scale': 3,
-        'n_chan': 12,
+        'n_scale': 4,
+        'n_chan': 32,
 
-        'static_node_proba': 1,
         'deter_eval': True,
 
         'recurrent': args.recurrent_policy
     }
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space, base=ThreeDimNeuralFabric,
-        base_kwargs=base_kwargs)
+                          base_kwargs=base_kwargs)
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -91,15 +85,15 @@ def main():
     elif args.algo == 'ppo':
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
-                               eps=args.eps,
-                               max_grad_norm=args.max_grad_norm)
+                         eps=args.eps,
+                         max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, acktr=True)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                        envs.observation_space.shape, envs.action_space,
-                        actor_critic.recurrent_hidden_state_size)
+                              envs.observation_space.shape, envs.action_space,
+                              actor_critic.recurrent_hidden_state_size)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -125,9 +119,9 @@ def main():
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
-                        rollouts.masks[step]
+                    rollouts.obs[step],
+                    rollouts.recurrent_hidden_states[step],
+                    rollouts.masks[step]
                 )
 
             # Obser reward and next obs
@@ -175,7 +169,8 @@ def main():
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
-            print("Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
+            print(
+                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
                 format(j, total_num_steps,
                        int(total_num_steps / (end - start)),
                        len(episode_rewards),
@@ -201,7 +196,7 @@ def main():
 
             obs = eval_envs.reset()
             eval_recurrent_hidden_states = torch.zeros(args.num_processes,
-                            actor_critic.recurrent_hidden_state_size, device=device)
+                                                       actor_critic.recurrent_hidden_state_size, device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
             while len(eval_episode_rewards) < 10:
@@ -224,8 +219,8 @@ def main():
             eval_envs.close()
 
             print(" Evaluation using {} episodes: mean reward {:.5f}\n".
-                format(len(eval_episode_rewards),
-                       np.mean(eval_episode_rewards)))
+                  format(len(eval_episode_rewards),
+                         np.mean(eval_episode_rewards)))
 
         if args.vis and j % args.vis_interval == 0:
             try:
