@@ -25,6 +25,8 @@ def get_args():
                         help='value loss coefficient (default: 0.5)')
     parser.add_argument('--arch-loss-coef', type=float, default=0,
                         help='Architecture loss coef (default: 0)')
+    parser.add_argument('--static', action='store_true', default=False,
+                        help='Use architecture search')
     parser.add_argument('--max-grad-norm', type=float, default=0.5,
                         help='max norm of gradients (default: 0.5)')
     parser.add_argument('--seed', type=int, default=1,

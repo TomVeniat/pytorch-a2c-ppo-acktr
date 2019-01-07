@@ -66,13 +66,14 @@ def main():
 
     base_kwargs = {
         'n_layer': 1,
-        'n_block': 1,
-        'n_scale': 4,
+        'n_block': 3,
+        'n_scale': 5,
         'n_chan': 32,
 
         'deter_eval': True,
 
-        'recurrent': args.recurrent_policy
+        'recurrent': args.recurrent_policy,
+        'static': args.static,
     }
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space, base=ThreeDimNeuralFabric,
@@ -84,6 +85,7 @@ def main():
     cost_evaluator.init_costs(actor_critic.base.base)
     print('Cost: {:.5E}'.format(cost_evaluator.total_cost))
     print(actor_critic)
+    print(actor_critic.base.base)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
@@ -189,6 +191,7 @@ def main():
                        np.min(episode_rewards),
                        np.max(episode_rewards), dist_entropy,
                        value_loss, action_loss))
+            print('Params: {}'.format(actor_critic.base.gamma))
 
         if (args.eval_interval is not None
                 and len(episode_rewards) > 1
