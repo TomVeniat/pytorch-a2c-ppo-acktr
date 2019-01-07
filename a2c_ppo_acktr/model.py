@@ -172,21 +172,26 @@ class NNBase(nn.Module):
         return x, hxs
 
 class Adaptor(NNBase):
-    def __init__(self, base, recurrent, obs_shape, n_classes, **kwargs):
+    def __init__(self, base, recurrent, obs_shape, n_classes, static, **kwargs):
         super(Adaptor, self).__init__(recurrent, n_classes, n_classes)
         self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
         self.recurrent = recurrent
-        # self.register_buffer('probas', torch.ones(1, self.base.n_stochastic_nodes))
-        # self.register_buffer('probas', torch.ones(1, self.base.n_nodes))
-        self.probas = nn.Parameter(torch.ones(1, self.base.n_nodes)*3)
+        self.static = static
+        if not self.static:
+            self.gamma = nn.Parameter(torch.ones(1, self.base.n_stoch_nodes)*3)
+        else:
+            self.gamma = None
 
     def forward(self, inputs, rnn_hxs, masks):
         self.base.fire(type='new_sequence')
         self.base.log_probas = []
 
-        # self.probabilities = torch.cat([self.probabilities, probas.unsqueeze(0).detach().cpu()])
-        # print(self.probas.device)
-        self.base.set_probas(self.probas.sigmoid(), all_same=True)
+        if self.static:
+            probas = torch.ones(1, self.base.n_stoch_nodes).to(inputs.device)
+        else:
+            probas = self.gamma.sigmoid()
+
+        self.base.set_probas(probas)
 
         x = self.base(inputs / 255.0)[0]
 

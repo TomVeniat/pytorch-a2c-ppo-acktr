@@ -64,7 +64,7 @@ class A2C_ACKTR():
         stacked_log_probas = torch.stack(self.actor_critic.base.base.log_probas)
         arch_reward = (value_loss * self.value_loss_coef + action_loss) - self.arch_loss_coef * costs_p.mean()
         arch_loss = -(arch_reward * stacked_log_probas).mean()
-        print('Sampled={}, pruned={}'.format(costs_s, costs_p))
+        # print('Sampled={}, pruned={}'.format(costs_s, costs_p))
         ###
 
         if self.acktr and self.optimizer.steps % self.optimizer.Ts == 0:
@@ -85,8 +85,8 @@ class A2C_ACKTR():
             self.optimizer.acc_stats = False
 
         self.optimizer.zero_grad()
-        print('Params: {}'.format(self.actor_critic.base.probas))
-        print('Params: {}'.format(self.actor_critic.base.base.probas))
+        # print('Params: {}'.format(self.actor_critic.base.probas))
+        # print('Params: {}'.format(self.actor_critic.base.base.probas))
 
         (value_loss * self.value_loss_coef + action_loss -
          dist_entropy * self.entropy_coef + arch_loss).backward()
