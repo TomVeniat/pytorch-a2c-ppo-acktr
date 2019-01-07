@@ -14,7 +14,10 @@ class A2C_ACKTR():
                  eps=None,
                  alpha=None,
                  max_grad_norm=None,
-                 acktr=False):
+                 acktr=False,
+                 path_recorder=None,
+                 cost_evaluator=None,
+                 arch_loss_coef=0):
 
         self.actor_critic = actor_critic
         self.acktr = acktr
@@ -23,6 +26,10 @@ class A2C_ACKTR():
         self.entropy_coef = entropy_coef
 
         self.max_grad_norm = max_grad_norm
+
+        self.path_recorder = path_recorder
+        self.cost_evaluator = cost_evaluator
+        self.arch_loss_coef = arch_loss_coef
 
         if acktr:
             self.optimizer = KFACOptimizer(actor_critic)
@@ -49,6 +56,17 @@ class A2C_ACKTR():
 
         action_loss = -(advantages.detach() * action_log_probs).mean()
 
+        ### ARCH LOSS
+
+        sampled, pruned = self.path_recorder.get_architectures(self.actor_critic.base.base.out_nodes)
+        costs_s = self.cost_evaluator.get_costs(sampled)  # Sampled cost
+        costs_p = self.cost_evaluator.get_costs(pruned)  # Pruned cost
+        stacked_log_probas = torch.stack(self.actor_critic.base.base.log_probas)
+        arch_reward = (value_loss * self.value_loss_coef + action_loss) - self.arch_loss_coef * costs_p.mean()
+        arch_loss = -(arch_reward * stacked_log_probas).mean()
+        print('Sampled={}, pruned={}'.format(costs_s, costs_p))
+        ###
+
         if self.acktr and self.optimizer.steps % self.optimizer.Ts == 0:
             # Sampled fisher, see Martens 2014
             self.actor_critic.zero_grad()
@@ -67,8 +85,11 @@ class A2C_ACKTR():
             self.optimizer.acc_stats = False
 
         self.optimizer.zero_grad()
+        print('Params: {}'.format(self.actor_critic.base.probas))
+        print('Params: {}'.format(self.actor_critic.base.base.probas))
+
         (value_loss * self.value_loss_coef + action_loss -
-         dist_entropy * self.entropy_coef).backward()
+         dist_entropy * self.entropy_coef + arch_loss).backward()
 
         if self.acktr == False:
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
