@@ -177,7 +177,8 @@ class Adaptor(NNBase):
         self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
         self.recurrent = recurrent
         # self.register_buffer('probas', torch.ones(1, self.base.n_stochastic_nodes))
-        self.register_buffer('probas', torch.ones(1, self.base.n_nodes))
+        # self.register_buffer('probas', torch.ones(1, self.base.n_nodes))
+        self.probas = nn.Parameter(torch.ones(1, self.base.n_nodes)*3)
 
     def forward(self, inputs, rnn_hxs, masks):
         self.base.fire(type='new_sequence')
@@ -185,7 +186,7 @@ class Adaptor(NNBase):
 
         # self.probabilities = torch.cat([self.probabilities, probas.unsqueeze(0).detach().cpu()])
         # print(self.probas.device)
-        self.base.set_probas(self.probas, all_same=True)
+        self.base.set_probas(self.probas.sigmoid(), all_same=True)
 
         x = self.base(inputs / 255.0)[0]
 

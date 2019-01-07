@@ -6,7 +6,9 @@ from collections import deque
 
 import numpy as np
 import torch
+from supernets.implementation.ComputationCostEvaluator import ComputationCostEvaluator
 from supernets.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric
+from supernets.interface.PathRecorder import PathRecorder
 from tqdm import tqdm
 
 from a2c_ppo_acktr import algo
@@ -77,11 +79,19 @@ def main():
                           base_kwargs=base_kwargs)
     actor_critic.to(device)
 
+    path_recorder = PathRecorder(actor_critic.base.base)
+    cost_evaluator = ComputationCostEvaluator(node_index=path_recorder.node_index, bw=False)
+    cost_evaluator.init_costs(actor_critic.base.base)
+    print('Cost: {:.5E}'.format(cost_evaluator.total_cost))
+    print(actor_critic)
+
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
-                               max_grad_norm=args.max_grad_norm)
+                               max_grad_norm=args.max_grad_norm,
+                               path_recorder=path_recorder, cost_evaluator=cost_evaluator,
+                               arch_loss_coef=args.arch_loss_coef)
     elif args.algo == 'ppo':
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
