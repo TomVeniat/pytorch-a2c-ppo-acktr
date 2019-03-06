@@ -62,7 +62,7 @@ def load_data(indir, smooth, bin_size):
             for line in f:
                 tmp = line.split(',')
                 t_time = float(tmp[2])
-                tmp = [t_time, int(tmp[1]), float(tmp[0])]
+                tmp = [t_time, int(tmp[1]), float(tmp[0].replace('\x00', ''))]
                 datas.append(tmp)
 
     datas = sorted(datas, key=lambda d_entry: d_entry[0])

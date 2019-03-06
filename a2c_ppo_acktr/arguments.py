@@ -25,7 +25,7 @@ def get_args():
                         help='value loss coefficient (default: 0.5)')
     parser.add_argument('--arch-loss-coef', type=float, default=0,
                         help='Architecture loss coef (default: 0)')
-    parser.add_argument('--static', action='store_true', default=False,
+    parser.add_argument('--static', action='store_true', default=True,
                         help='Use architecture search')
     parser.add_argument('--max-grad-norm', type=float, default=0.5,
                         help='max norm of gradients (default: 0.5)')
@@ -57,7 +57,8 @@ def get_args():
                         help='environment to train on (default: PongNoFrameskip-v4)')
     parser.add_argument('--log-dir', default='/tmp/gym/',
                         help='directory to save agent logs (default: /tmp/gym)')
-    parser.add_argument('--save-dir', default='./trained_models/',
+    # parser.add_argument('--save-dir', default='./trained_models/',
+    parser.add_argument('--save-dir', default='',
                         help='directory to save agent logs (default: ./trained_models/)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
@@ -69,10 +70,20 @@ def get_args():
                         help='use a linear schedule on the learning rate')
     parser.add_argument('--use-linear-clip-decay', action='store_true', default=False,
                         help='use a linear schedule on the ppo clipping parameter')
+
+    parser.add_argument('--use-cnf', action='store_true', default=False,
+                        help='use the Convolutional Neural Fabrics as base')
+    parser.add_argument('--nlayer', type=int, default=1)
+    parser.add_argument('--nblock', type=int, default=1)
+    parser.add_argument('--nscale', type=int, default=2)
+    parser.add_argument('--nchan', type=int, default=32)
+
     parser.add_argument('--vis', action='store_true', default=False,
                         help='enable visdom visualization')
     parser.add_argument('--port', type=int, default=8097,
                         help='port to run the server on (default: 8097)')
+    parser.add_argument('--server', type=str, default="localhost",
+                        help='Server to use (default: localhost)')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

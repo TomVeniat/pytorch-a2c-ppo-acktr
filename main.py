@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import copy
 import glob
 import os
@@ -36,6 +38,7 @@ if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
     torch.backends.cudnn.deterministic = True
 
 try:
+    args.log_dir = os.path.join(args.log_dir, datetime.now().strftime('%Y-%m-%d_%H:%M:%S'))
     os.makedirs(args.log_dir)
 except OSError:
     files = glob.glob(os.path.join(args.log_dir, '*.monitor.csv'))
@@ -58,34 +61,48 @@ def main():
 
     if args.vis:
         from visdom import Visdom
-        viz = Visdom(port=args.port)
+
+        if args.use_cnf:
+            env = 'l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
+        else:
+            env = 'base_mine'
+
+        viz = Visdom(server=args.server, port=args.port, env=env)
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, args.add_timestep, device, False)
+    if args.use_cnf:
+        base_kwargs = {
+            'n_layer': args.nlayer,
+            'n_block': args.nblock,
+            'n_scale': args.nscale,
+            'n_chan': args.nchan,
 
-    base_kwargs = {
-        'n_layer': 1,
-        'n_block': 3,
-        'n_scale': 5,
-        'n_chan': 32,
+            'deter_eval': True,
 
-        'deter_eval': True,
+            'recurrent': args.recurrent_policy,
+            'static': args.static,
+        }
+        base = ThreeDimNeuralFabric
+    else:
+        base_kwargs = {'recurrent': args.recurrent_policy}
+        base = None
 
-        'recurrent': args.recurrent_policy,
-        'static': args.static,
-    }
-
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space, base=ThreeDimNeuralFabric,
+    actor_critic = Policy(envs.observation_space.shape, envs.action_space, base=base,
                           base_kwargs=base_kwargs)
     actor_critic.to(device)
+    if args.use_cnf:
+        path_recorder = PathRecorder(actor_critic.base.base)
+        cost_evaluator = ComputationCostEvaluator(node_index=path_recorder.node_index, bw=False)
+        cost_evaluator.init_costs(actor_critic.base.base)
+        print('Cost: {:.5E}'.format(cost_evaluator.total_cost))
+        print(actor_critic)
+        print(actor_critic.base.base)
+    else:
+        path_recorder = None
+        cost_evaluator = None
 
-    path_recorder = PathRecorder(actor_critic.base.base)
-    cost_evaluator = ComputationCostEvaluator(node_index=path_recorder.node_index, bw=False)
-    cost_evaluator.init_costs(actor_critic.base.base)
-    print('Cost: {:.5E}'.format(cost_evaluator.total_cost))
-    print(actor_critic)
-    print(actor_critic.base.base)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
@@ -112,6 +129,8 @@ def main():
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=10)
+
+    print(actor_critic)
 
     start = time.time()
     for j in tqdm(range(num_updates), desc='Outer'):
@@ -181,17 +200,18 @@ def main():
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
-            print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
+            print("Updates {}, num timesteps {}, FPS {} ({})\n"
+                  "\tLast {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
                 format(j, total_num_steps,
                        int(total_num_steps / (end - start)),
+                       args.log_dir,
                        len(episode_rewards),
                        np.mean(episode_rewards),
                        np.median(episode_rewards),
                        np.min(episode_rewards),
                        np.max(episode_rewards), dist_entropy,
                        value_loss, action_loss))
-            print('Params: {}'.format(actor_critic.base.gamma))
+            # print('Params: {}'.format(actor_critic.base.gamma))
 
         if (args.eval_interval is not None
                 and len(episode_rewards) > 1

@@ -25,7 +25,11 @@ class Policy(nn.Module):
             else:
                 raise NotImplementedError
 
-        self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
+        if 'deter_eval' in base_kwargs:
+            self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
+        else:
+            self.base = base(obs_shape[0], **base_kwargs)
+
         self.base.critic_linear = nn.Linear(self.base.output_size, 1)
 
         if action_space.__class__.__name__ == "Discrete":
