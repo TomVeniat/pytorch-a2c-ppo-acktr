@@ -215,7 +215,7 @@ class CNNBase(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
-        init_ = lambda m: m
+        # init_ = lambda m: m
 
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
@@ -233,7 +233,7 @@ class CNNBase(NNBase):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        init_ = lambda m: m
+        # init_ = lambda m: m
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
 

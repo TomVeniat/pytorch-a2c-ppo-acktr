@@ -65,7 +65,7 @@ def main():
         if args.use_cnf:
             env = 'l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
         else:
-            env = 'base_mine'
+            env = 'base_mine_fixed'
 
         viz = Visdom(server=args.server, port=args.port, env=env)
         win = None
