@@ -31,10 +31,9 @@ class A2C_ACKTR():
         self.cost_evaluator = cost_evaluator
         self.arch_loss_coef = arch_loss_coef
 
-        if acktr:
-            self.optimizer = KFACOptimizer(actor_critic)
-        else:
-            self.optimizer = optim.RMSprop(
+        # self.optimizer = optim.Adam(
+        #         actor_critic.parameters(), lr, eps=eps)
+        self.optimizer = optim.RMSprop(
                 actor_critic.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
@@ -69,22 +68,6 @@ class A2C_ACKTR():
         # print('Sampled={}, pruned={}'.format(costs_s, costs_p))
         ###
 
-        if self.acktr and self.optimizer.steps % self.optimizer.Ts == 0:
-            # Sampled fisher, see Martens 2014
-            self.actor_critic.zero_grad()
-            pg_fisher_loss = -action_log_probs.mean()
-
-            value_noise = torch.randn(values.size())
-            if values.is_cuda:
-                value_noise = value_noise.cuda()
-
-            sample_values = values + value_noise
-            vf_fisher_loss = -(values - sample_values.detach()).pow(2).mean()
-
-            fisher_loss = pg_fisher_loss + vf_fisher_loss
-            self.optimizer.acc_stats = True
-            fisher_loss.backward(retain_graph=True)
-            self.optimizer.acc_stats = False
 
         self.optimizer.zero_grad()
         # print('Params: {}'.format(self.actor_critic.base.probas))

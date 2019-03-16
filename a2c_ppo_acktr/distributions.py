@@ -50,18 +50,21 @@ FixedBernoulli.mode = lambda self: torch.gt(self.probs, 0.5).float()
 
 
 class Categorical(nn.Module):
-    def __init__(self, num_inputs, num_outputs):
+    def __init__(self, num_inputs, num_outputs, adapt=True):
         super(Categorical, self).__init__()
+        self.adapt = adapt
+        if self.adapt:
 
-        init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=0.01)
+            init_ = lambda m: init(m,
+                nn.init.orthogonal_,
+                lambda x: nn.init.constant_(x, 0),
+                gain=0.01)
 
-        self.linear = init_(nn.Linear(num_inputs, num_outputs))
+            self.linear = init_(nn.Linear(num_inputs, num_outputs))
 
     def forward(self, x):
-        x = self.linear(x)
+        if self.adapt:
+            x = self.linear(x)
         return FixedCategorical(logits=x)
 
 

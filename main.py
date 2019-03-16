@@ -16,14 +16,14 @@ from tqdm import tqdm
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
-from a2c_ppo_acktr.model import Policy
+from a2c_ppo_acktr.model import Policy, ThreeDimCNFAdapter
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
 
 args = get_args()
 
-assert args.algo in ['a2c', 'ppo', 'acktr']
+assert args.algo in ['a2c']
 if args.recurrent_policy:
     assert args.algo in ['a2c', 'ppo'], \
         'Recurrent policy is not implemented for ACKTR'
@@ -63,10 +63,10 @@ def main():
         from visdom import Visdom
 
         if args.use_cnf:
-            env = 'l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
+            env = 'v2_l{}_b{}_s{}_c{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
         else:
-            env = 'base_mine_fixed'
-
+            env = 'v2_base_mine_fixed'
+        env_url = f"http://{args.server}:{args.port}/env/{env}"
         viz = Visdom(server=args.server, port=args.port, env=env)
         win = None
 
@@ -83,8 +83,9 @@ def main():
 
             'recurrent': args.recurrent_policy,
             'static': args.static,
+            'bn': False,
         }
-        base = ThreeDimNeuralFabric
+        base = ThreeDimCNFAdapter
     else:
         base_kwargs = {'recurrent': args.recurrent_policy}
         base = None
@@ -104,21 +105,12 @@ def main():
         cost_evaluator = None
 
 
-    if args.algo == 'a2c':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
+    agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm,
                                path_recorder=path_recorder, cost_evaluator=cost_evaluator,
                                arch_loss_coef=args.arch_loss_coef)
-    elif args.algo == 'ppo':
-        agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
-                         args.value_loss_coef, args.entropy_coef, lr=args.lr,
-                         eps=args.eps,
-                         max_grad_norm=args.max_grad_norm)
-    elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
-                               args.entropy_coef, acktr=True)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space.shape, envs.action_space,
@@ -133,15 +125,11 @@ def main():
     print(actor_critic)
 
     start = time.time()
-    for j in tqdm(range(num_updates), desc='Outer'):
+    for j in tqdm(range(num_updates), desc='Updates'):
 
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
-            if args.algo == "acktr":
-                # use optimizer's learning rate since it's hard-coded in kfac.py
-                update_linear_schedule(agent.optimizer, j, num_updates, agent.optimizer.lr)
-            else:
-                update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
+            update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
 
         if args.algo == 'ppo' and args.use_linear_lr_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
@@ -197,10 +185,9 @@ def main():
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
-
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
-            print("Updates {}, num timesteps {}, FPS {} ({})\n"
+            tqdm.write("Updates {}, num timesteps {}, FPS {} ({})\n"
                   "\tLast {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
                 format(j, total_num_steps,
                        int(total_num_steps / (end - start)),
@@ -211,6 +198,8 @@ def main():
                        np.min(episode_rewards),
                        np.max(episode_rewards), dist_entropy,
                        value_loss, action_loss))
+            if args.vis:
+                tqdm.write('\t{}'.format(env_url))
             # print('Params: {}'.format(actor_critic.base.gamma))
 
         if (args.eval_interval is not None
@@ -256,19 +245,8 @@ def main():
                          np.mean(eval_episode_rewards)))
 
         if args.vis and j % args.vis_interval == 0:
-            try:
-                # Sometimes monitor doesn't properly flush the outputs
-                win = visdom_plot(viz, win, args.log_dir, args.env_name,
+            win = visdom_plot(viz, win, args.log_dir, args.env_name,
                                   args.algo, args.num_env_steps)
-            except IOError as err:
-                print('#####')
-                print('#####')
-                print('#####')
-                print('GOT an error {}'.format(err))
-                print('#####')
-                print('#####')
-                print('#####')
-                pass
 
 
 if __name__ == "__main__":

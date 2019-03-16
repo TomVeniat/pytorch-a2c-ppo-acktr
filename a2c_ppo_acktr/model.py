@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from supernets.implementation.ThreeDimNeuralFabric import ThreeDimNeuralFabric, Out
 
 from a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli
 from a2c_ppo_acktr.utils import init
@@ -26,15 +27,20 @@ class Policy(nn.Module):
                 raise NotImplementedError
 
         if 'deter_eval' in base_kwargs:
-            self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
+            self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=action_space.n, **base_kwargs)
+            # self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
+            # self.base = ThreeDimCNFAdapter(input_dim=obs_shape, n_classes=action_space.n, **base_kwargs)
         else:
             self.base = base(obs_shape[0], **base_kwargs)
-
-        self.base.critic_linear = nn.Linear(self.base.output_size, 1)
+            # self.base.critic_linear = nn.Linear(self.base.output_size, 1)
 
         if action_space.__class__.__name__ == "Discrete":
-            num_outputs = action_space.n
-            self.dist = Categorical(self.base.output_size, num_outputs)
+            if 'deter_eval' in base_kwargs:
+                self.dist = Categorical(None, None, adapt=False)
+            else:
+                num_outputs = action_space.n
+                self.dist = Categorical(self.base.output_size, num_outputs)
+
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
             self.dist = DiagGaussian(self.base.output_size, num_outputs)
@@ -87,8 +93,8 @@ class Policy(nn.Module):
 
 class NNBase(nn.Module):
 
-    def __init__(self, recurrent, recurrent_input_size, hidden_size):
-        super(NNBase, self).__init__()
+    def __init__(self, recurrent, recurrent_input_size, hidden_size, **kwargs):
+        super(NNBase, self).__init__(**kwargs)
 
         self._hidden_size = hidden_size
         self._recurrent = recurrent
@@ -175,36 +181,6 @@ class NNBase(nn.Module):
 
         return x, hxs
 
-class Adaptor(NNBase):
-    def __init__(self, base, recurrent, obs_shape, n_classes, static, **kwargs):
-        super(Adaptor, self).__init__(recurrent, n_classes, n_classes)
-        self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
-        self.recurrent = recurrent
-        self.static = static
-        if not self.static:
-            self.gamma = nn.Parameter(torch.ones(1, self.base.n_stoch_nodes)*3)
-        else:
-            self.gamma = None
-
-    def forward(self, inputs, rnn_hxs, masks):
-        self.base.fire(type='new_sequence')
-        self.base.log_probas = []
-
-        if self.static:
-            probas = torch.ones(1, self.base.n_stoch_nodes).to(inputs.device)
-        else:
-            probas = self.gamma.sigmoid()
-
-        self.base.set_probas(probas)
-
-        x = self.base(inputs / 255.0)[0]
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        return self.critic_linear(x), x, rnn_hxs
-
-
 
 class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
@@ -288,3 +264,78 @@ class MLPBase(NNBase):
         hidden_actor = self.actor(x)
 
         return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+
+class Adaptor(NNBase):
+    def __init__(self, base, recurrent, obs_shape, n_classes, static, **kwargs):
+        super(Adaptor, self).__init__(recurrent, n_classes, n_classes)
+        self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
+        self.recurrent = recurrent
+        self.static = static
+        if not self.static:
+            self.gamma = nn.Parameter(torch.ones(1, self.base.n_stoch_nodes)*3)
+        else:
+            self.gamma = None
+
+    def forward(self, inputs, rnn_hxs, masks):
+        self.base.fire(type='new_sequence')
+        self.base.log_probas = []
+
+        if self.static:
+            probas = torch.ones(1, self.base.n_stoch_nodes).to(inputs.device)
+        else:
+            probas = self.gamma.sigmoid()
+
+        self.base.set_probas(probas)
+
+        x, val = self.base(inputs / 255.0)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return val, x, rnn_hxs
+
+
+class ThreeDimCNFAdapter(ThreeDimNeuralFabric):
+    VALUE_OUT_NAME = 'Value'
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        assert len(self.out_nodes) == 1
+
+        self.critic = True
+
+        value_out = Out(self.n_features, 1, self.bias)
+
+        self.graph.add_node(self.VALUE_OUT_NAME, module=value_out)
+        self.register_stochastic_node(self.VALUE_OUT_NAME)
+
+        self.blocks.append(value_out)
+
+        for block in range(self.n_block):
+            # Connect all the blocks in last scale, last layer to the Value Out block
+            cur_node = (self.n_layer - 1, self.n_scales - 1, block)
+            self.graph.add_edge(cur_node, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
+
+        self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME, self.VALUE_OUT_NAME])
+
+    #
+    # def forward(self,  inputs, rnn_hxs, masks):
+    #     # pi, val = super().forward(inputs)
+    #
+    #     self.fire(type='new_sequence')
+    #     self.log_probas = []
+    #
+    #     if self.static:
+    #         probas = torch.ones(1, self.n_stoch_nodes).to(inputs.device)
+    #     else:
+    #         probas = self.gamma.sigmoid()
+    #
+    #     self.set_probas(probas)
+    #
+    #     pi, val = super().__call__(inputs / 255.0)
+    #
+    #     if self.is_recurrent:
+    #         pi, rnn_hxs = self._forward_gru(pi, rnn_hxs, masks)
+    #
+    #     return val, pi, rnn_hxs
