@@ -63,16 +63,19 @@ def main():
         from visdom import Visdom
 
         if args.use_cnf:
-            env = 'v2_l{}_b{}_s{}_c{}_h{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden)
+            env = 'v3_cnf_l{}_b{}_s{}_c{}_h{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden)
+        elif args.use_cnf_full:
+            env = 'v3_cnfull_l{}_b{}_s{}_c{}_h{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden)
+
         else:
-            env = 'v2_base_mine_fixed'
+            env = 'v3_base_mine_fixed'
         env_url = f"http://{args.server}:{args.port}/env/{env}"
         viz = Visdom(server=args.server, port=args.port, env=env)
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, args.add_timestep, device, False)
-    if args.use_cnf:
+    if args.use_cnf or args.use_cnf_full:
         base_kwargs = {
             'n_layer': args.nlayer,
             'n_block': args.nblock,
@@ -83,10 +86,18 @@ def main():
 
             'recurrent': args.recurrent_policy,
             'static': args.static,
-            'hidden_size': args.hidden,
-            'bn': False,
+
+            'bn': True,
         }
-        base = ThreeDimCNFAdapter
+        if args.use_cnf:
+            base_kwargs['n_classes'] = args.hidden
+            base = ThreeDimNeuralFabric
+        else:
+            base_kwargs['hidden_size'] = args.hidden
+            # base_kwargs['n_classes'] = args.hidden
+            base_kwargs['n_classes'] = envs.action_space.n
+
+            base = ThreeDimCNFAdapter
     else:
         base_kwargs = {'recurrent': args.recurrent_policy}
         base = None

@@ -73,11 +73,13 @@ def get_args():
 
     parser.add_argument('--use-cnf', action='store_true', default=False,
                         help='use the Convolutional Neural Fabrics as base')
+    parser.add_argument('--use-cnf-full', action='store_true', default=False,
+                        help='use the Convolutional Neural Fabrics as base')
     parser.add_argument('--nlayer', type=int, default=1)
     parser.add_argument('--nblock', type=int, default=1)
     parser.add_argument('--nscale', type=int, default=2)
     parser.add_argument('--nchan', type=int, default=32)
-    parser.add_argument('--hidden', type=int, default=None)
+    parser.add_argument('--hidden', type=int, default=512)
 
     parser.add_argument('--vis', action='store_true', default=False,
                         help='enable visdom visualization')

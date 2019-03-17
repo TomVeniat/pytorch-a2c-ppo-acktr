@@ -30,12 +30,15 @@ class Policy(nn.Module):
             self.base = Adaptor(base=base, obs_shape=obs_shape, action_space=action_space, **base_kwargs)
             # self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
             # self.base = ThreeDimCNFAdapter(input_dim=obs_shape, n_classes=action_space.n, **base_kwargs)
+            if base == ThreeDimNeuralFabric:
+                self.base.critic_linear = nn.Linear(self.base.output_size, 1)
+
         else:
             self.base = base(obs_shape[0], **base_kwargs)
-            # self.base.critic_linear = nn.Linear(self.base.output_size, 1)
+            self.base.critic_linear = nn.Linear(self.base.output_size, 1)
 
         if action_space.__class__.__name__ == "Discrete":
-            if 'deter_eval' in base_kwargs:
+            if base == ThreeDimCNFAdapter:
                 self.dist = Categorical(None, None, adapt=False)
             else:
                 num_outputs = action_space.n
@@ -267,8 +270,8 @@ class MLPBase(NNBase):
 
 class Adaptor(NNBase):
     def __init__(self, base, recurrent, obs_shape, action_space, static, **kwargs):
-        super(Adaptor, self).__init__(recurrent, action_space.n, action_space.n)
-        self.base = base(input_dim=obs_shape, action_space=action_space, **kwargs)
+        super(Adaptor, self).__init__(recurrent, kwargs['n_classes'], kwargs['n_classes'])
+        self.base = base(input_dim=obs_shape, **kwargs)
         self.recurrent = recurrent
         self.static = static
         if not self.static:
@@ -287,7 +290,13 @@ class Adaptor(NNBase):
 
         self.base.set_probas(probas)
 
-        x, val = self.base(inputs / 255.0)
+        res = self.base(inputs / 255.0)
+        if len(res) == 2:
+            x, val = res
+        else:
+            assert len(res) == 1
+            x, val = res[0], self.critic_linear(res[0])
+
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
@@ -300,9 +309,9 @@ class ThreeDimCNFAdapter(ThreeDimNeuralFabric):
     VALUE_OUT_NAME = 'Value'
     PI_OUT_NAME = 'Action'
 
-    def __init__(self, action_space, critic=True, static=True, hidden_size=None, **args):
+    def __init__(self, n_classes, critic=True, static=True, hidden_size=None, **args):
         self.hidden_size = hidden_size
-        args['n_classes'] = action_space.n if self.hidden_size is None else self.hidden_size
+        args['n_classes'] = n_classes if hidden_size is None else hidden_size
         super().__init__(**args)
 
         assert len(self.out_nodes) == 1
@@ -333,7 +342,7 @@ class ThreeDimCNFAdapter(ThreeDimNeuralFabric):
 
             self.graph.add_edge(self.OUTPUT_NAME, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
 
-            pi_out = Out(self.hidden_size, action_space.n, self.bias)
+            pi_out = Out(self.hidden_size, n_classes, self.bias)
             self.graph.add_node(self.PI_OUT_NAME, module=pi_out)
             self.register_stochastic_node(self.PI_OUT_NAME)
             self.blocks.append(pi_out)
