@@ -63,7 +63,7 @@ def main():
         from visdom import Visdom
 
         if args.use_cnf:
-            env = 'v2_l{}_b{}_s{}_c{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
+            env = 'v2_l{}_b{}_s{}_c{}_h{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden)
         else:
             env = 'v2_base_mine_fixed'
         env_url = f"http://{args.server}:{args.port}/env/{env}"
@@ -83,6 +83,7 @@ def main():
 
             'recurrent': args.recurrent_policy,
             'static': args.static,
+            'hidden_size': args.hidden,
             'bn': False,
         }
         base = ThreeDimCNFAdapter

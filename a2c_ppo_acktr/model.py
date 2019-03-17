@@ -27,7 +27,7 @@ class Policy(nn.Module):
                 raise NotImplementedError
 
         if 'deter_eval' in base_kwargs:
-            self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=action_space.n, **base_kwargs)
+            self.base = Adaptor(base=base, obs_shape=obs_shape, action_space=action_space, **base_kwargs)
             # self.base = Adaptor(base=base, obs_shape=obs_shape, n_classes=512, **base_kwargs)
             # self.base = ThreeDimCNFAdapter(input_dim=obs_shape, n_classes=action_space.n, **base_kwargs)
         else:
@@ -266,9 +266,9 @@ class MLPBase(NNBase):
         return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
 
 class Adaptor(NNBase):
-    def __init__(self, base, recurrent, obs_shape, n_classes, static, **kwargs):
-        super(Adaptor, self).__init__(recurrent, n_classes, n_classes)
-        self.base = base(input_dim=obs_shape, n_classes=n_classes, **kwargs)
+    def __init__(self, base, recurrent, obs_shape, action_space, static, **kwargs):
+        super(Adaptor, self).__init__(recurrent, action_space.n, action_space.n)
+        self.base = base(input_dim=obs_shape, action_space=action_space, **kwargs)
         self.recurrent = recurrent
         self.static = static
         if not self.static:
@@ -295,47 +295,101 @@ class Adaptor(NNBase):
         return val, x, rnn_hxs
 
 
+
 class ThreeDimCNFAdapter(ThreeDimNeuralFabric):
     VALUE_OUT_NAME = 'Value'
+    PI_OUT_NAME = 'Action'
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, action_space, critic=True, static=True, hidden_size=None, **args):
+        self.hidden_size = hidden_size
+        args['n_classes'] = action_space.n if self.hidden_size is None else self.hidden_size
+        super().__init__(**args)
 
         assert len(self.out_nodes) == 1
 
-        self.critic = True
+        self.static = static
+        self.critic = critic
 
-        value_out = Out(self.n_features, 1, self.bias)
+        if self.hidden_size is None:
+            value_out = Out(self.n_features, 1, self.bias)
 
-        self.graph.add_node(self.VALUE_OUT_NAME, module=value_out)
-        self.register_stochastic_node(self.VALUE_OUT_NAME)
+            self.graph.add_node(self.VALUE_OUT_NAME, module=value_out)
+            self.register_stochastic_node(self.VALUE_OUT_NAME)
 
-        self.blocks.append(value_out)
+            self.blocks.append(value_out)
 
-        for block in range(self.n_block):
-            # Connect all the blocks in last scale, last layer to the Value Out block
-            cur_node = (self.n_layer - 1, self.n_scales - 1, block)
-            self.graph.add_edge(cur_node, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
+            for block in range(self.n_block):
+                # Connect all the blocks in last scale, last layer to the Value Out block
+                cur_node = (self.n_layer - 1, self.n_scales - 1, block)
+                self.graph.add_edge(cur_node, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
 
-        self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME, self.VALUE_OUT_NAME])
+            self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME, self.VALUE_OUT_NAME])
 
-    #
-    # def forward(self,  inputs, rnn_hxs, masks):
-    #     # pi, val = super().forward(inputs)
-    #
-    #     self.fire(type='new_sequence')
-    #     self.log_probas = []
-    #
-    #     if self.static:
-    #         probas = torch.ones(1, self.n_stoch_nodes).to(inputs.device)
-    #     else:
-    #         probas = self.gamma.sigmoid()
-    #
-    #     self.set_probas(probas)
-    #
-    #     pi, val = super().__call__(inputs / 255.0)
-    #
-    #     if self.is_recurrent:
-    #         pi, rnn_hxs = self._forward_gru(pi, rnn_hxs, masks)
-    #
-    #     return val, pi, rnn_hxs
+        else:
+            value_out = Out(self.hidden_size, 1, self.bias)
+            self.graph.add_node(self.VALUE_OUT_NAME, module=value_out)
+            self.register_stochastic_node(self.VALUE_OUT_NAME)
+            self.blocks.append(value_out)
+
+            self.graph.add_edge(self.OUTPUT_NAME, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
+
+            pi_out = Out(self.hidden_size, action_space.n, self.bias)
+            self.graph.add_node(self.PI_OUT_NAME, module=pi_out)
+            self.register_stochastic_node(self.PI_OUT_NAME)
+            self.blocks.append(pi_out)
+
+            self.graph.add_edge(self.OUTPUT_NAME, self.PI_OUT_NAME, width_node=self.PI_OUT_NAME)
+
+            self.set_graph(self.graph, [self.INPUT_NAME], [self.PI_OUT_NAME, self.VALUE_OUT_NAME])
+
+
+    def forward(self, inputs):
+        pi, val = super().forward(inputs)
+        return pi, val
+
+
+#
+# class ThreeDimCNFAdapter(ThreeDimNeuralFabric):
+#     VALUE_OUT_NAME = 'Value'
+#
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#
+#         assert len(self.out_nodes) == 1
+#
+#         self.critic = True
+#
+#         value_out = Out(self.n_features, 1, self.bias)
+#
+#         self.graph.add_node(self.VALUE_OUT_NAME, module=value_out)
+#         self.register_stochastic_node(self.VALUE_OUT_NAME)
+#
+#         self.blocks.append(value_out)
+#
+#         for block in range(self.n_block):
+#             # Connect all the blocks in last scale, last layer to the Value Out block
+#             cur_node = (self.n_layer - 1, self.n_scales - 1, block)
+#             self.graph.add_edge(cur_node, self.VALUE_OUT_NAME, width_node=self.VALUE_OUT_NAME)
+#
+#         self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME, self.VALUE_OUT_NAME])
+#
+#     #
+#     # def forward(self,  inputs, rnn_hxs, masks):
+#     #     # pi, val = super().forward(inputs)
+#     #
+#     #     self.fire(type='new_sequence')
+#     #     self.log_probas = []
+#     #
+#     #     if self.static:
+#     #         probas = torch.ones(1, self.n_stoch_nodes).to(inputs.device)
+#     #     else:
+#     #         probas = self.gamma.sigmoid()
+#     #
+#     #     self.set_probas(probas)
+#     #
+#     #     pi, val = super().__call__(inputs / 255.0)
+#     #
+#     #     if self.is_recurrent:
+#     #         pi, rnn_hxs = self._forward_gru(pi, rnn_hxs, masks)
+#     #
+#     #     return val, pi, rnn_hxs
