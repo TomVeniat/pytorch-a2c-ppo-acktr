@@ -63,7 +63,7 @@ def main():
         from visdom import Visdom
 
         if args.use_cnf:
-            env = 'l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
+            env = 'master_l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
         else:
             env = 'base_mine_fixed'
 
