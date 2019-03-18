@@ -4,6 +4,7 @@ import copy
 import glob
 import os
 import time
+import socket
 from collections import deque
 
 import numpy as np
