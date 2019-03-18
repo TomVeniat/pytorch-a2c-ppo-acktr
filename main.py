@@ -68,7 +68,7 @@ def main():
             env = 'master_l{}_b{}_s{}_c{}_'.format(args.nlayer, args.nblock, args.nscale, args.nchan)
         else:
             env = 'base_mine_fixed'
-
+        env_url = f"http://{args.server}:{args.port}/env/{env}"
         viz = Visdom(server=args.server, port=args.port, env=env)
         win = None
 
@@ -202,7 +202,7 @@ def main():
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
-            print("Updates {}, num timesteps {}, FPS {} ({})\n"
+            tqdm.write("Updates {}, num timesteps {}, FPS {} ({})\n"
                   "\tLast {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
                 format(j, total_num_steps,
                        int(total_num_steps / (end - start)),
@@ -213,6 +213,8 @@ def main():
                        np.min(episode_rewards),
                        np.max(episode_rewards), dist_entropy,
                        value_loss, action_loss))
+            if args.vis:
+                tqdm.write('\t{}'.format(env_url))
             # print('Params: {}'.format(actor_critic.base.gamma))
 
         if (args.eval_interval is not None
