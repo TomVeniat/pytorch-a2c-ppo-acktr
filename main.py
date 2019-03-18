@@ -1,3 +1,5 @@
+import socket
+
 from datetime import datetime
 
 import copy
@@ -38,7 +40,7 @@ if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
     torch.backends.cudnn.deterministic = True
 
 try:
-    args.log_dir = os.path.join(args.log_dir, datetime.now().strftime('%Y-%m-%d_%H:%M:%S'))
+    args.log_dir = os.path.join(args.log_dir, socket.gethostname(), datetime.now().strftime('%Y-%m-%d_%H:%M:%S'))
     os.makedirs(args.log_dir)
 except OSError:
     files = glob.glob(os.path.join(args.log_dir, '*.monitor.csv'))
