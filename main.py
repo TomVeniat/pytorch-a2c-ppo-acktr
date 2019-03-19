@@ -66,7 +66,7 @@ def main():
         if args.use_cnf:
             env = 'v3_cnf_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "nobn" if args.nobn else "bn")
         elif args.use_cnf_full:
-            env = 'debug_v3_cnfull_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "nobn" if args.nobn else "bn")
+            env = 'v3_cnfull_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "nobn" if args.nobn else "bn")
 
         else:
             env = 'v3_base_mine_fixed'
