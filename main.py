@@ -64,9 +64,9 @@ def main():
         from visdom import Visdom
 
         if args.use_cnf:
-            env = 'v3_cnf_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "bn" if args.bn else "nobn")
+            env = 'v3_cnf_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "nobn" if args.nobn else "bn")
         elif args.use_cnf_full:
-            env = 'v3_cnfull_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "bn" if args.bn else "nobn")
+            env = 'debug_v3_cnfull_l{}_b{}_s{}_c{}_h{}_{}'.format(args.nlayer, args.nblock, args.nscale, args.nchan, args.hidden, "nobn" if args.nobn else "bn")
 
         else:
             env = 'v3_base_mine_fixed'
@@ -88,7 +88,7 @@ def main():
             'recurrent': args.recurrent_policy,
             'static': args.static,
 
-            'bn': args.bn,
+            'bn': not args.nobn,
         }
         if args.use_cnf:
             base_kwargs['n_classes'] = args.hidden
